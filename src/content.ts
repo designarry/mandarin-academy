@@ -44,10 +44,23 @@ export const hero = {
 }
 
 // TODO: replace with real figures
-export const stats = [
-  { icon: 'school', value: '[000]+', label: 'Siswa Terdaftar' },
-  { icon: 'sentiment_satisfied', value: '[00]%', label: 'Siswa Puas' },
-  { icon: 'trending_up', value: '[00]%', label: 'Peningkatan Kemampuan' },
+/* `live`: value loaded from Backendless; `value` is the fallback if the request fails */
+export type LiveStat = { kind: 'count'; table: string } | { kind: 'percent'; table: string; where: string }
+
+export const stats: { icon: string; value: string; label: string; live?: LiveStat }[] = [
+  { icon: 'school', value: '[000]+', label: 'Siswa Terdaftar', live: { kind: 'count', table: 'students' } },
+  {
+    icon: 'sentiment_satisfied',
+    value: '[00]%',
+    label: 'Siswa Puas',
+    live: { kind: 'percent', table: 'students', where: 'puas = true' },
+  },
+  {
+    icon: 'trending_up',
+    value: '[00]%',
+    label: 'Siswa Lulus',
+    live: { kind: 'percent', table: 'students', where: 'graduated = true' },
+  },
 ]
 
 export const about = {
@@ -251,26 +264,20 @@ export const schedules = {
   ],
 }
 
-// TODO: replace with your real teachers
+/* Teacher names, universities and graduation years come from the Backendless `teacher` table.
+   The table has no photo column, so photos are matched to teachers in the order they were added. */
 export const teachers = {
   title: 'Guru yang Profesional di Bidangnya',
   description:
     'Pengajar kami berpengalaman dan terlatih membimbing siswa dari nol, sehingga siapa pun bisa mulai belajar dengan nyaman.',
-  items: [1, 2, 3, 4, 5].map((n) => ({
-    name: '[Nama Guru] Laoshi',
-    university: '[Universitas]',
-    image: { alt: 'Foto guru', src: `/images/teacher-${n}.webp` } as ImageRef,
-  })),
+  table: 'teacher',
+  photos: [1, 2, 3, 4, 5].map((n) => `/images/teacher-${n}.webp`),
 }
 
-// TODO: replace with real, permission-given student testimonials
+/* Testimonials come from the Backendless `students` table: only students with a testimony are shown */
 export const testimonials = {
   title: 'Apa Kata Mereka?',
-  items: Array.from({ length: 3 }, () => ({
-    name: '[Nama Siswa]',
-    role: '[Pekerjaan / Program]',
-    quote: '[Tulis testimoni asli dari siswa di sini.]',
-  })),
+  table: 'students',
 }
 
 // TODO: real address and map query

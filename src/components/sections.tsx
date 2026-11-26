@@ -1,4 +1,13 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  countRecords,
+  fetchTeachers,
+  fetchTestimonials,
+  percentRecords,
+  type Teacher,
+  type Testimonial,
+} from '../lib/backendless'
 import {
   about,
   brand,
@@ -17,6 +26,7 @@ import {
   waLink,
   whyUs,
 } from '../content'
+import type { LiveStat } from '../content'
 import { Icon, ImageSlot, Section, SectionHeader, WaButton } from './ui'
 
 /* ---------- Heroes ---------- */
@@ -44,6 +54,27 @@ export function HomeHero() {
   )
 }
 
+/* Stat value loaded from Backendless; falls back to the static value if the request fails */
+function LiveValue({ live, fallback }: { live: LiveStat; fallback: string }) {
+  const [value, setValue] = useState<number | null>(null)
+  const [failed, setFailed] = useState(false)
+  const { kind, table } = live
+  const where = live.kind === 'percent' ? live.where : undefined
+
+  useEffect(() => {
+    let active = true
+    const request = kind === 'percent' && where ? percentRecords(table, where) : countRecords(table)
+    request.then((n) => active && setValue(n)).catch(() => active && setFailed(true))
+    return () => {
+      active = false
+    }
+  }, [kind, table, where])
+
+  if (failed) return fallback
+  if (value === null) return <span className="loading loading-dots loading-md" aria-label="Memuat" />
+  return kind === 'percent' ? `${value}%` : value.toLocaleString('id-ID')
+}
+
 export function Statistics() {
   return (
     <div className="relative z-10 mx-auto -mt-14 max-w-6xl px-4">
@@ -53,7 +84,9 @@ export function Statistics() {
             <div className="stat-figure text-primary">
               <Icon name={stat.icon} className="icon-32" />
             </div>
-            <div className="stat-value text-primary">{stat.value}</div>
+            <div className="stat-value text-primary">
+              {stat.live ? <LiveValue live={stat.live} fallback={stat.value} /> : stat.value}
+            </div>
             <div className="stat-desc text-body-md">{stat.label}</div>
           </div>
         ))}
@@ -275,23 +308,59 @@ export function SchedulesSection() {
 
 /* ---------- People ---------- */
 
+function TeacherCard({ teacher, photo }: { teacher: Teacher; photo?: string }) {
+  const details = [teacher.university, teacher.yearGraduated && `Lulus ${teacher.yearGraduated}`].filter(Boolean).join(' · ')
+  return (
+    <div className="card bg-base-100 shadow-sm">
+      <figure>
+        <ImageSlot image={{ alt: `Foto ${teacher.name} Laoshi`, src: photo }} className="aspect-square w-full border-0" />
+      </figure>
+      <div className="card-body items-center gap-1 p-4 text-center">
+        <h3 className="text-heading-h4-bold">{teacher.name} Laoshi</h3>
+        {details && <p className="text-body-sm text-base-content/60">{details}</p>}
+      </div>
+    </div>
+  )
+}
+
+function TeacherCardSkeleton() {
+  return (
+    <div className="card bg-base-100 shadow-sm" aria-hidden="true">
+      <div className="skeleton aspect-square w-full rounded-b-none" />
+      <div className="card-body items-center gap-2 p-4">
+        <div className="skeleton h-5 w-24" />
+        <div className="skeleton h-4 w-32" />
+      </div>
+    </div>
+  )
+}
+
 export function TeachersSection() {
+  const [list, setList] = useState<Teacher[] | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    fetchTeachers(teachers.table)
+      .then((rows) => active && setList(rows))
+      .catch(() => active && setFailed(true))
+    return () => {
+      active = false
+    }
+  }, [])
+
   return (
     <Section muted>
       <SectionHeader title={teachers.title} description={teachers.description} />
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 lg:gap-6">
-        {teachers.items.map((teacher, i) => (
-          <div key={i} className="card bg-base-100 shadow-sm">
-            <figure>
-              <ImageSlot image={teacher.image} className="aspect-square w-full border-0" />
-            </figure>
-            <div className="card-body items-center gap-1 p-4 text-center">
-              <h3 className="text-heading-h4-bold">{teacher.name}</h3>
-              <p className="text-body-sm text-base-content/60">{teacher.university}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+      {failed ? (
+        <p className="text-center text-body-md text-base-content/60">Data guru belum dapat dimuat. Silakan coba lagi nanti.</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 lg:gap-6" aria-busy={list === null}>
+          {list === null
+            ? teachers.photos.map((photo) => <TeacherCardSkeleton key={photo} />)
+            : list.map((teacher, i) => <TeacherCard key={teacher.id} teacher={teacher} photo={teachers.photos[i]} />)}
+        </div>
+      )}
       <div className="mt-10 flex justify-center">
         <WaButton>Hubungi Kami</WaButton>
       </div>
@@ -299,43 +368,72 @@ export function TeachersSection() {
   )
 }
 
-function StarRating() {
+function TestimonialCard({ item }: { item: Testimonial }) {
   return (
-    <div className="rating rating-sm" aria-label="Rating 5 dari 5">
-      {[1, 2, 3, 4, 5].map((n) => (
-        <div key={n} className="mask mask-star-2 bg-accent" aria-current={n === 5 ? 'true' : undefined} />
-      ))}
+    <figure className="card border border-base-300 bg-base-100">
+      <div className="card-body gap-4">
+        <Icon name="format_quote" className="icon-32 text-primary/40" />
+        <blockquote className="flex-1 text-body-lg">{item.quote}</blockquote>
+        <figcaption className="flex items-center gap-3">
+          <div className="avatar avatar-placeholder">
+            <div className="w-11 rounded-full bg-primary/10 text-primary">
+              <Icon name="person" />
+            </div>
+          </div>
+          <div>
+            <p className="text-body-md-semibold">{item.name || 'Siswa'}</p>
+            {item.program && <p className="text-body-sm text-base-content/60">{item.program}</p>}
+          </div>
+        </figcaption>
+      </div>
+    </figure>
+  )
+}
+
+function TestimonialCardSkeleton() {
+  return (
+    <div className="card border border-base-300 bg-base-100" aria-hidden="true">
+      <div className="card-body gap-4">
+        <div className="skeleton h-8 w-8" />
+        <div className="skeleton h-4 w-full" />
+        <div className="skeleton h-4 w-full" />
+        <div className="skeleton h-4 w-2/3" />
+        <div className="flex items-center gap-3">
+          <div className="skeleton size-11 shrink-0 rounded-full" />
+          <div className="flex flex-col gap-2">
+            <div className="skeleton h-4 w-28" />
+            <div className="skeleton h-3 w-20" />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
 
+/* Hidden entirely when there are no testimonials or the request fails */
 export function TestimonialsSection() {
+  const [items, setItems] = useState<Testimonial[] | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    fetchTestimonials(testimonials.table)
+      .then((rows) => active && setItems(rows))
+      .catch(() => active && setFailed(true))
+    return () => {
+      active = false
+    }
+  }, [])
+
+  if (failed || items?.length === 0) return null
+
   return (
     <Section>
       <SectionHeader title={testimonials.title} />
-      <div className="grid gap-6 md:grid-cols-3">
-        {testimonials.items.map((item, i) => (
-          <figure key={i} className="card border border-base-300 bg-base-100">
-            <div className="card-body gap-4">
-              <div className="flex items-center justify-between">
-                <StarRating />
-                <Icon name="format_quote" className="icon-32 text-primary/40" />
-              </div>
-              <blockquote className="flex-1 text-body-lg">{item.quote}</blockquote>
-              <figcaption className="flex items-center gap-3">
-                <div className="avatar avatar-placeholder">
-                  <div className="w-11 rounded-full bg-primary/10 text-primary">
-                    <Icon name="person" />
-                  </div>
-                </div>
-                <div>
-                  <p className="text-body-md-semibold">{item.name}</p>
-                  <p className="text-body-sm text-base-content/60">{item.role}</p>
-                </div>
-              </figcaption>
-            </div>
-          </figure>
-        ))}
+      <div className="grid gap-6 md:grid-cols-3" aria-busy={items === null}>
+        {items === null
+          ? [1, 2, 3].map((n) => <TestimonialCardSkeleton key={n} />)
+          : items.map((item) => <TestimonialCard key={item.id} item={item} />)}
       </div>
     </Section>
   )
